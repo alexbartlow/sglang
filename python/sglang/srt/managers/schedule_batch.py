@@ -609,10 +609,16 @@ class Req(ReqDllmMixin):
         self.return_hidden_states = return_hidden_states
 
         # extra key for classifying the request (e.g. cache_salt)
+        # When --loras-share-prefix-cache is set, don't include lora_id in
+        # the cache key. This allows LoRA and non-LoRA requests to share
+        # prefix cache entries — safe when LoRAs don't modify K/V projections.
         if lora_id is not None:
-            extra_key = (
-                extra_key or ""
-            ) + lora_id  # lora_id is concatenated to the extra key
+            from sglang.srt.server_args import get_global_server_args
+            server_args = get_global_server_args()
+            if not server_args.loras_share_prefix_cache:
+                extra_key = (
+                    extra_key or ""
+                ) + lora_id
 
         self.extra_key = extra_key
         self.lora_id = lora_id

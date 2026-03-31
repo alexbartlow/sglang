@@ -462,6 +462,7 @@ class ServerArgs:
     max_loaded_loras: Optional[int] = None
     max_loras_per_batch: int = 8
     lora_eviction_policy: str = "lru"
+    loras_share_prefix_cache: bool = False
     lora_backend: str = "csgmv"
     max_lora_chunk_size: Optional[int] = 16
 
@@ -4580,6 +4581,15 @@ class ServerArgs:
             default=ServerArgs.lora_eviction_policy,
             choices=["lru", "fifo"],
             help="LoRA adapter eviction policy when memory pool is full. 'lru': Least Recently Used (default, better cache efficiency). 'fifo': First-In-First-Out.",
+        )
+        parser.add_argument(
+            "--loras-share-prefix-cache",
+            default=ServerArgs.loras_share_prefix_cache,
+            action="store_true",
+            help="Allow LoRA and non-LoRA requests to share prefix cache "
+            "entries. Safe when LoRA adapters do not modify K/V projections "
+            "(e.g. q_proj, o_proj, or mlp-only LoRAs). Avoids redundant prefill for requests "
+            "that differ only in adapter.",
         )
         parser.add_argument(
             "--lora-backend",
