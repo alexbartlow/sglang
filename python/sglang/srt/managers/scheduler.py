@@ -828,6 +828,16 @@ class Scheduler(
         self.waiting_queue: List[Req] = []
         # The running decoding batch for continuous batching
         self.running_batch: ScheduleBatch = ScheduleBatch(reqs=[], batch_is_full=False)
+
+        # Server-side monitor manager for KV-sharing safety evaluation
+        if getattr(self.server_args, "monitor_lora_id", None):
+            from sglang.srt.managers.monitor_manager import MonitorManager
+            self.monitor_manager = MonitorManager(
+                tokenizer=self.tokenizer,
+                monitor_lora_id=self.server_args.monitor_lora_id,
+            )
+        else:
+            self.monitor_manager = None
         # The current forward batch
         self.cur_batch: Optional[ScheduleBatch] = None
         # The last forward batch
@@ -1725,6 +1735,12 @@ class Scheduler(
             )
             req.tokenizer = self.tokenizer
 
+            # Set up server-side monitor evaluation if requested
+            if self.monitor_manager and getattr(recv_req, "monitor_rubric", None):
+                req.monitor_rubric = recv_req.monitor_rubric
+                req.monitor_interval = getattr(recv_req, "monitor_interval", None) or 64
+                self.monitor_manager.on_request_added(req)
+
             if self.disaggregation_mode != DisaggregationMode.NULL:
                 # Invalid request for disaggregated mode
                 if (
@@ -2187,6 +2203,18 @@ class Scheduler(
             new_batch = self.get_new_batch_dllm()
         else:
             new_batch = self.get_new_batch_prefill()
+
+        # Inject server-side monitor evals into the prefill batch
+        if self.monitor_manager and self.running_batch.reqs:
+            due_monitors = self.monitor_manager.get_due_evals(
+                self.running_batch.reqs,
+                self.req_to_token_pool,
+            )
+            for monitor_req in due_monitors:
+                self.waiting_queue.append(monitor_req)
+            # Re-run prefill batch selection if we added monitors
+            if due_monitors and new_batch is None:
+                new_batch = self.get_new_batch_prefill()
 
         need_mlp_sync = self.require_mlp_sync
         if need_mlp_sync and not self.spec_algorithm.is_none():

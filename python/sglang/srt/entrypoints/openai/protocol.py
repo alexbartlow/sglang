@@ -340,6 +340,7 @@ class SglExt(BaseModel):
 
     routed_experts: Optional[str] = None
     cached_tokens_details: Optional[CachedTokensDetails] = None
+    monitor_scores: Optional[List[dict]] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler):
@@ -623,6 +624,10 @@ class ChatCompletionRequest(BaseModel):
     # Custom logit processor for advanced sampling control
     custom_logit_processor: Optional[Union[List[Optional[str]], str]] = None
     custom_params: Optional[Dict] = None
+
+    # Server-side safety monitor parameters
+    monitor_rubric: Optional[List[str]] = None
+    monitor_interval: Optional[int] = None
 
     # For request id
     rid: Optional[Union[List[str], str]] = None

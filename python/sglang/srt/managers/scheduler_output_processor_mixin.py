@@ -15,6 +15,7 @@ from sglang.srt.managers.io_struct import (
     BatchTokenIDOutput,
 )
 from sglang.srt.managers.schedule_batch import (
+    FINISH_ABORT,
     BaseFinishReason,
     Req,
     ScheduleBatch,
@@ -434,6 +435,10 @@ class SchedulerOutputProcessorMixin:
                 req.output_ids.extend(next_token_id)
                 new_accepted_len = len(next_token_id)
 
+            # Track tokens for server-side monitor evaluation
+            if self.monitor_manager and req.monitor_rubric:
+                self.monitor_manager.on_tokens_generated(req.rid, new_accepted_len)
+
             # Update Mamba last track seqlen
             self._mamba_prefix_cache_update(req, batch, result, i)
 
@@ -463,6 +468,24 @@ class SchedulerOutputProcessorMixin:
                     release_kv_cache(req, self.tree_cache)
 
                 req.time_stats.set_completion_time()
+
+                # Handle monitor lifecycle on request finish
+                if self.monitor_manager:
+                    if req.is_monitor_eval:
+                        # Monitor eval completed — extract score
+                        self.monitor_manager.on_eval_completed(
+                            req.rid, req.output_ids
+                        )
+                    elif req.monitor_rubric:
+                        # Parent request finished — abort active monitors
+                        abort_rids = self.monitor_manager.on_request_finished(
+                            req.rid
+                        )
+                        for abort_rid in abort_rids:
+                            for r in batch.reqs:
+                                if r.rid == abort_rid:
+                                    r.to_finish = FINISH_ABORT()
+                                    break
 
             self.maybe_collect_customized_info(i, req, logits_output)
 
@@ -953,6 +976,10 @@ class SchedulerOutputProcessorMixin:
             if req is skip_req:
                 continue
 
+            # Monitor eval requests are internal — no HTTP output
+            if req.is_monitor_eval:
+                continue
+
             if req.finished():
                 if req.finished_output:
                     # With the overlap schedule, a request will try to output twice and hit this line twice
@@ -1110,6 +1137,18 @@ class SchedulerOutputProcessorMixin:
                         customized_info[k].append(
                             v[send_token_offset : len(output_ids_)]
                         )
+
+                # Attach pending monitor scores via customized_info
+                if self.monitor_manager and not req.is_monitor_eval:
+                    scores = self.monitor_manager.get_pending_scores(req.rid)
+                    if scores is not None:
+                        if "monitor_scores" not in customized_info:
+                            customized_info["monitor_scores"] = [
+                                None
+                            ] * (len(rids) - 1)
+                        customized_info["monitor_scores"].append(scores)
+                    elif "monitor_scores" in customized_info:
+                        customized_info["monitor_scores"].append(None)
 
             if (
                 req.finished()

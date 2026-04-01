@@ -321,6 +321,8 @@ class OpenAIServingChat(OpenAIServingBase):
             image_max_dynamic_patch=img_max_dynamic_patch,
             video_max_dynamic_patch=vid_max_dynamic_patch,
             max_dynamic_patch=getattr(request, "max_dynamic_patch", None),
+            monitor_rubric=request.monitor_rubric,
+            monitor_interval=request.monitor_interval,
         )
 
         return adapted_request, request
@@ -788,6 +790,18 @@ class OpenAIServingChat(OpenAIServingBase):
                             )
 
                         yield f"data: {chunk.model_dump_json()}\n\n"
+
+                # Emit monitor scores if available
+                monitor_scores = content["meta_info"].get("monitor_scores")
+                if monitor_scores:
+                    monitor_chunk = ChatCompletionStreamResponse(
+                        id=content["meta_info"]["id"],
+                        created=int(time.time()),
+                        choices=[],
+                        model=request.model,
+                        sglext=SglExt(monitor_scores=monitor_scores),
+                    )
+                    yield f"data: {monitor_chunk.model_dump_json()}\n\n"
 
             # Send finish_reason chunks for each index that completed
             for idx, finish_reason_data in finish_reasons.items():

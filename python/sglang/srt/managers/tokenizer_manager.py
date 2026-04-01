@@ -979,6 +979,11 @@ class TokenizerManager(TokenizerCommunicatorMixin, TokenizerManagerMultiItemMixi
                 routing_key=obj.routing_key,
                 need_wait_for_mm_inputs=obj.need_wait_for_mm_inputs,
                 num_items_assigned=obj.num_items_assigned,
+                monitor_rubric=(
+                    [obj.monitor_rubric] if isinstance(obj.monitor_rubric, str)
+                    else obj.monitor_rubric
+                ) if getattr(obj, "monitor_rubric", None) else None,
+                monitor_interval=getattr(obj, "monitor_interval", None),
             )
         elif isinstance(obj, EmbeddingReqInput):
             tokenized_obj = TokenizedEmbeddingReqInput(

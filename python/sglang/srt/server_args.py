@@ -465,6 +465,8 @@ class ServerArgs:
     loras_share_prefix_cache: bool = False
     lora_backend: str = "csgmv"
     max_lora_chunk_size: Optional[int] = 16
+    # Server-side safety monitor LoRA adapter ID (must match a key in --lora-paths)
+    monitor_lora_id: Optional[str] = None
 
     # Kernel backend
     attention_backend: Optional[str] = None
@@ -4604,6 +4606,12 @@ class ServerArgs:
             default=ServerArgs.max_lora_chunk_size,
             choices=[16, 32, 64, 128],
             help="Maximum chunk size for the ChunkedSGMV LoRA backend. Only used when --lora-backend is 'csgmv'. Choosing a larger value might improve performance.",
+        )
+        parser.add_argument(
+            "--monitor-lora-id",
+            type=str,
+            default=ServerArgs.monitor_lora_id,
+            help="LoRA adapter ID for server-side safety monitoring. Must match a key in --lora-paths.",
         )
 
         # Kernel backend

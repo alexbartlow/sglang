@@ -690,6 +690,13 @@ class Req(ReqDllmMixin):
         # processed.
         self.is_chunked = 0
 
+        # Monitor eval tracking
+        self.monitor_rubric: Optional[List[str]] = None
+        self.monitor_interval: Optional[int] = None
+        self.monitor_tokens_since_eval: int = 0
+        self.is_monitor_eval: bool = False
+        self.monitor_parent_rid: Optional[str] = None
+
         # For retraction
         self.is_retracted = False
         # Indicates if the req has ever been retracted.
@@ -905,6 +912,15 @@ class Req(ReqDllmMixin):
         tree_cache: Optional[BasePrefixCache] = None,
         cow_mamba: Optional[bool] = None,
     ):
+        # Monitor evals have prefix_indices pre-populated from parent's KV
+        # snapshot. Skip radix tree matching — just set extend_input_len.
+        if self.is_monitor_eval:
+            self.fill_ids = self.origin_input_ids
+            self.set_extend_input_len(
+                len(self.fill_ids) - len(self.prefix_indices)
+            )
+            return
+
         if self.is_dllm():
             self._init_fill_ids_for_dllm()
             self.determine_dllm_phase()

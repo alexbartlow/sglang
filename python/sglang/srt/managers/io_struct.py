@@ -210,6 +210,10 @@ class GenerateReqInput(BaseReq):
     # Conversation id used for tracking requests
     conversation_id: Optional[str] = None
 
+    # Server-side safety monitor parameters
+    monitor_rubric: Optional[Union[List[str], str]] = None
+    monitor_interval: Optional[int] = None
+
     # Priority for the request
     priority: Optional[int] = None
 
@@ -748,6 +752,10 @@ class TokenizedGenerateReqInput(BaseReq):
 
     # For observability
     time_stats: Optional[Union[APIServerReqTimeStats, DPControllerReqTimeStats]] = None
+
+    # Server-side safety monitor parameters
+    monitor_rubric: Optional[List[str]] = None
+    monitor_interval: Optional[int] = None
 
 
 @dataclass
