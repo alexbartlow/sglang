@@ -832,10 +832,31 @@ class Scheduler(
         # Server-side monitor manager for KV-sharing safety evaluation
         if getattr(self.server_args, "monitor_lora_id", None):
             from sglang.srt.managers.monitor_manager import MonitorManager
-            self.monitor_manager = MonitorManager(
-                tokenizer=self.tokenizer,
-                monitor_lora_id=self.server_args.monitor_lora_id,
-            )
+            # Resolve lora name to internal UUID used by the lora manager
+            monitor_lora_name = self.server_args.monitor_lora_id
+            monitor_lora_uuid = None
+            if self.enable_lora:
+                lora_mgr = self.tp_worker.model_runner.lora_manager
+                for uid, ref in lora_mgr.lora_refs.items():
+                    if ref.lora_name == monitor_lora_name:
+                        monitor_lora_uuid = uid
+                        break
+            if monitor_lora_uuid is None:
+                logger.warning(
+                    "Monitor LoRA '%s' not found in loaded adapters. "
+                    "Server-side monitoring disabled.",
+                    monitor_lora_name,
+                )
+                self.monitor_manager = None
+            else:
+                logger.info(
+                    "Monitor LoRA '%s' resolved to ID %s",
+                    monitor_lora_name, monitor_lora_uuid,
+                )
+                self.monitor_manager = MonitorManager(
+                    tokenizer=self.tokenizer,
+                    monitor_lora_id=monitor_lora_uuid,
+                )
         else:
             self.monitor_manager = None
         # The current forward batch
