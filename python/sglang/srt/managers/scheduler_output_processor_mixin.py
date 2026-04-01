@@ -204,6 +204,12 @@ class SchedulerOutputProcessorMixin:
                         self.maybe_collect_routed_experts(req)
                         if req.is_monitor_eval:
                             self._release_monitor_kv(req)
+                            # Extract monitor score (monitor finishes in prefill
+                            # since max_new_tokens=1)
+                            if self.monitor_manager:
+                                self.monitor_manager.on_eval_completed(
+                                    req.rid, req.output_ids
+                                )
                         else:
                             release_kv_cache(req, self.tree_cache)
                         req.time_stats.set_completion_time()
