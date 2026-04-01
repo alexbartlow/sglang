@@ -2211,6 +2211,7 @@ class Scheduler(
                 self.req_to_token_pool,
             )
             for monitor_req in due_monitors:
+                monitor_req.last_node = self.tree_cache.root_node
                 self.waiting_queue.append(monitor_req)
             # Re-run prefill batch selection if we added monitors
             if due_monitors and new_batch is None:

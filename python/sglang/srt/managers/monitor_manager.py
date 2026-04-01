@@ -183,6 +183,7 @@ class MonitorManager:
         monitor_req.is_monitor_eval = True
         monitor_req.monitor_parent_rid = parent.rid
         monitor_req.prefix_indices = prefix_indices
+        monitor_req.cache_protected_len = len(prefix_indices)
         monitor_req.fill_ids = full_input_ids
         monitor_req.extend_input_len = len(suffix_ids)
         monitor_req.tokenizer = self.tokenizer
