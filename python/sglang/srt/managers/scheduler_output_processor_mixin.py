@@ -129,12 +129,16 @@ class SchedulerOutputProcessorMixin:
             return
         prefix_len = len(req.prefix_indices)
         seq_len = req.kv_committed_len
-        if seq_len > prefix_len:
+        suffix_len = max(0, seq_len - prefix_len)
+        if suffix_len > 0:
             suffix_indices = self.req_to_token_pool.req_to_token[
                 req.req_pool_idx, prefix_len:seq_len
             ]
             self.tree_cache.token_to_kv_pool_allocator.free(suffix_indices)
         self.req_to_token_pool.free(req)
+        # Track freed pages for leak detection
+        if self.monitor_manager:
+            self.monitor_manager.stats_suffix_pages_freed += suffix_len
 
     def process_batch_result_prefill(
         self: Scheduler,

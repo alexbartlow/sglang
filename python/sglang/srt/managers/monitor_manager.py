@@ -86,6 +86,12 @@ class MonitorManager:
         # Pre-tokenize the scoring prompt template
         self._suffix_cache: Dict[str, List[int]] = {}
 
+        # Stats for monitoring overhead
+        self.stats_evals_created: int = 0
+        self.stats_evals_completed: int = 0
+        self.stats_suffix_pages_allocated: int = 0
+        self.stats_suffix_pages_freed: int = 0
+
     def on_request_added(self, req: Req):
         """Start tracking a request that has monitor_rubric set."""
         if not req.monitor_rubric:
@@ -139,6 +145,8 @@ class MonitorManager:
                 state.tokens_since_last_eval = 0
                 state.active_monitor_rids.append(monitor_req.rid)
                 self.active_evals[monitor_req.rid] = state.worker_rid
+                self.stats_evals_created += 1
+                self.stats_suffix_pages_allocated += monitor_req.extend_input_len
 
         return due
 
@@ -227,6 +235,8 @@ class MonitorManager:
         if state is not None and monitor_rid in state.active_monitor_rids:
             state.active_monitor_rids.remove(monitor_rid)
 
+        self.stats_evals_completed += 1
+
         # Extract the score token
         if output_ids:
             question_idx = (
@@ -254,6 +264,27 @@ class MonitorManager:
                 score_text,
                 question[:50],
             )
+
+        # Periodic stats (first eval, then every 10)
+        if self.stats_evals_completed == 1 or self.stats_evals_completed % 10 == 0:
+            self._log_stats()
+
+    def _log_stats(self):
+        """Log monitor KV overhead stats."""
+        leaked = self.stats_suffix_pages_allocated - self.stats_suffix_pages_freed
+        logger.info(
+            "Monitor stats: created=%d completed=%d active=%d "
+            "suffix_pages(alloc=%d freed=%d leaked=%d) "
+            "tracked_parents=%d pending_scores=%d",
+            self.stats_evals_created,
+            self.stats_evals_completed,
+            len(self.active_evals),
+            self.stats_suffix_pages_allocated,
+            self.stats_suffix_pages_freed,
+            leaked,
+            len(self.tracked),
+            len(self.pending_scores),
+        )
 
     def get_pending_scores(self, parent_rid: str) -> Optional[List[dict]]:
         """Pop any pending scores for a parent request (for SSE output)."""
