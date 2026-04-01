@@ -139,6 +139,24 @@ class LoRAAdapter(nn.Module):
             self.normalize_qkv_proj(weight_names, layer.weights)
             self.normalize_gate_up_proj(weight_names, layer.weights)
 
+    def _zero_kv_weight_like(
+        self, q_weight: torch.Tensor, weight_name: str
+    ) -> torch.Tensor:
+        """Create zero k/v weight with correct shape for GQA models.
+
+        For lora_B weights, k/v output dim may differ from q due to GQA
+        (fewer kv heads). For lora_A, input dim is the same.
+        """
+        cfg = self.base_hf_config
+        num_q = cfg.num_attention_heads
+        num_kv = getattr(cfg, "num_key_value_heads", num_q)
+        if num_kv == num_q or "lora_A" in weight_name:
+            return torch.zeros_like(q_weight)
+        # lora_B: q shape is [q_out, rank], kv shape is [kv_out, rank]
+        head_dim = getattr(cfg, "head_dim", cfg.hidden_size // num_q)
+        kv_out = num_kv * head_dim
+        return torch.zeros(kv_out, q_weight.shape[1], dtype=q_weight.dtype)
+
     def normalize_qkv_proj(
         self, weight_names: List[str], weights: Dict[str, torch.Tensor]
     ):
@@ -164,17 +182,21 @@ class LoRAAdapter(nn.Module):
                 v_name = weight_name.replace("q_proj", "v_proj")
                 qkv_name = weight_name.replace("q_proj", "qkv_proj")
 
-                # If k_proj or v_proj doesn't have lora, initialize to zero
-                k_proj_weight = (
-                    weights[k_name]
-                    if "k_proj" in target_module
-                    else torch.zeros_like(weights[q_name])
-                )
-                v_proj_weight = (
-                    weights[v_name]
-                    if "v_proj" in target_module
-                    else torch.zeros_like(weights[q_name])
-                )
+                # If k_proj or v_proj doesn't have lora, initialize to zero.
+                # For GQA models, k/v projections may have different sizes
+                # than q, so we compute the correct shape from the config.
+                if "k_proj" in target_module:
+                    k_proj_weight = weights[k_name]
+                else:
+                    k_proj_weight = self._zero_kv_weight_like(
+                        weights[q_name], weight_name
+                    )
+                if "v_proj" in target_module:
+                    v_proj_weight = weights[v_name]
+                else:
+                    v_proj_weight = self._zero_kv_weight_like(
+                        weights[q_name], weight_name
+                    )
                 weights[qkv_name] = torch.cat(
                     (
                         weights[q_name],
