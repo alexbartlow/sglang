@@ -166,7 +166,7 @@ class MonitorManager:
         # because new decode tokens get new pages (pages are append-only).
         prefix_indices = req_to_token_pool.req_to_token[
             parent.req_pool_idx, :parent_seq_len
-        ].clone()
+        ].clone().to(torch.int64)
 
         monitor_rid = f"monitor-{uuid.uuid4().hex[:12]}"
 
