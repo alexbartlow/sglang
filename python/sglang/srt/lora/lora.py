@@ -164,24 +164,30 @@ class LoRAAdapter(nn.Module):
                 v_name = weight_name.replace("q_proj", "v_proj")
                 qkv_name = weight_name.replace("q_proj", "qkv_proj")
 
-                # If k_proj doesn't have lora, initialize it to zero
+                # If k_proj or v_proj doesn't have lora, initialize to zero
                 k_proj_weight = (
                     weights[k_name]
                     if "k_proj" in target_module
-                    else torch.zeros_like(weights[v_name])
+                    else torch.zeros_like(weights[q_name])
+                )
+                v_proj_weight = (
+                    weights[v_name]
+                    if "v_proj" in target_module
+                    else torch.zeros_like(weights[q_name])
                 )
                 weights[qkv_name] = torch.cat(
                     (
                         weights[q_name],
                         k_proj_weight,
-                        weights[v_name],
+                        v_proj_weight,
                     ),
                     0,
                 )
                 weights.pop(q_name)
                 if "k_proj" in target_module:
                     weights.pop(k_name)
-                weights.pop(v_name)
+                if "v_proj" in target_module:
+                    weights.pop(v_name)
             elif "qkv_proj" in weight_name:
                 # If qkv_proj is already stacked, we normalize it following the SGL convention.
                 qkv_name = weight_name
