@@ -119,6 +119,24 @@ class SchedulerOutputProcessorMixin:
                     elem = elem.copy()
                 req.customized_info[k].append(elem)
 
+    def _release_monitor_kv(self: Scheduler, req: Req):
+        """Free only the suffix KV pages for a finished monitor eval.
+
+        The prefix pages are shared with the parent request and must NOT
+        be freed here — the parent still owns them.
+        """
+        if req.req_pool_idx is None:
+            return
+        prefix_len = len(req.prefix_indices)
+        seq_len = req.kv_committed_len
+        if seq_len > prefix_len:
+            suffix_indices = self.req_to_token_pool.req_to_token[
+                req.req_pool_idx, prefix_len:seq_len
+            ]
+            self.tree_cache.token_to_kv_pool_allocator.free(suffix_indices)
+        self.req_to_token_pool.free(req.req_pool_idx)
+        req.req_pool_idx = None
+
     def process_batch_result_prefill(
         self: Scheduler,
         batch: ScheduleBatch,
@@ -185,10 +203,14 @@ class SchedulerOutputProcessorMixin:
 
                     if req.finished():
                         self.maybe_collect_routed_experts(req)
-                        release_kv_cache(req, self.tree_cache)
+                        if req.is_monitor_eval:
+                            self._release_monitor_kv(req)
+                        else:
+                            release_kv_cache(req, self.tree_cache)
                         req.time_stats.set_completion_time()
                     elif not batch.decoding_reqs or req not in batch.decoding_reqs:
-                        self.tree_cache.cache_unfinished_req(req)
+                        if not req.is_monitor_eval:
+                            self.tree_cache.cache_unfinished_req(req)
                         if self.enable_hisparse:
                             self.hisparse_coordinator.admit_request_into_staging(req)
 
@@ -458,7 +480,10 @@ class SchedulerOutputProcessorMixin:
                     req.multimodal_inputs.release_features()
                 self.maybe_collect_routed_experts(req)
 
-                if self.server_args.disaggregation_decode_enable_offload_kvcache:
+                if req.is_monitor_eval:
+                    # Monitor eval: only free suffix pages (not the shared prefix)
+                    self._release_monitor_kv(req)
+                elif self.server_args.disaggregation_decode_enable_offload_kvcache:
                     # Asynchronously offload KV cache; release_kv_cache will be called after Device->Host transfer completes
                     if not self.decode_offload_manager.offload_kv_cache(req):
                         self.decode_offload_manager.finalize_release_on_finish(req)
