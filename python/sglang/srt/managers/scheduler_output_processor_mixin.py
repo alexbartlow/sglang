@@ -134,8 +134,7 @@ class SchedulerOutputProcessorMixin:
                 req.req_pool_idx, prefix_len:seq_len
             ]
             self.tree_cache.token_to_kv_pool_allocator.free(suffix_indices)
-        self.req_to_token_pool.free(req.req_pool_idx)
-        req.req_pool_idx = None
+        self.req_to_token_pool.free(req)
 
     def process_batch_result_prefill(
         self: Scheduler,
