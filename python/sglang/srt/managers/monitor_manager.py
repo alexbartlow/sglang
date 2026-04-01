@@ -146,7 +146,8 @@ class MonitorManager:
                 state.active_monitor_rids.append(monitor_req.rid)
                 self.active_evals[monitor_req.rid] = state.worker_rid
                 self.stats_evals_created += 1
-                self.stats_suffix_pages_allocated += monitor_req.extend_input_len
+                # +1 for the decode token page
+                self.stats_suffix_pages_allocated += monitor_req.extend_input_len + 1
 
         return due
 
